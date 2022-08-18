@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>test</title>
+    <style>
+
+        body {margin: 0;}
+    </style>
+</head>
+<body>
+	<script src="js/preloadjs.js"></script>
+	<script src="js/three.js"></script>
+	<script src="js/SVGLoader.js"></script>
+	<script src="js/OrbitControls.js"></script>
+	<script src="util.js"></script>
+    <script src="firework.js"></script>
+	<script>
+		let nowRecording = false;
+		const scene = new THREE.Scene();
+		
+		// Step.1: ヘルパー類を表示 showHelper();
+		showHelper()
+		
+		const renderer = initialize(scene);
+		const camera = createCamera();
+		
+		const ambientLight = new THREE.AmbientLight( 0x242424 );
+		scene.add(ambientLight);
+
+
+		let fireballs = [];
+		let fireworks = [];
+
+		let particleTexture;
+
+		const loader = new THREE.TextureLoader();
+		// Step? 好きな画像を選ぼう
+		loader.load('./assets/images/particle.png', (texture) => {
+			console.log("texture loaded")
+			particleTexture = texture;
+
+			// Step.2 new FireWork(texture);
+			const add = (FireWork) => {
+				let firework = new FireWork(texture);
+				fireballs.push(firework);
+				scene.add(firework.pointCloud);
+			};
+
+			window.addEventListener('click' , (event) => {
+				add(FireWork);
+			});
+			
+			
+			//　Sample: 右クリックするたびに録音開始，終了の切り替え
+			window.oncontextmenu = () => {
+				if(nowRecording) {
+					nowRecording = false;
+					recoStop();
+				} else {
+					nowRecording = true;
+					recoStart();
+				}
+			};
+
+
+			window.addEventListener('keyup', (event) => {
+				switch(event.key) {
+					case " ":
+						// Step4 add(RemoteFireWork);
+						add(RemoteFireWork);
+						break;
+					// Step5 case "Enter":
+					case "Enter":
+						fireballs.filter( fireball => fireball instanceof RemoteFireWork)
+							.forEach((fireball, i) => {
+								fireball.fire();
+								fireballs.splice(i, 1);
+								fireworks.push(fireball);
+							});
+
+						break;
+					case "Control":
+						nowRecording = false;
+						recoStop();
+						break;
+					default:
+						console.log(event.key);
+				}
+			}, false);
+
+
+
+			window.addEventListener('keydown', (event) => {
+				if(event.key === 'Control') {
+					if(nowRecording) return;
+
+					nowRecording = true;
+					recoStart();
+				}
+			}, false);
+
+			animate();
+		});
+		
+		function animate() {
+			requestAnimationFrame( animate );
+
+			fireballs.forEach((fireball, i) => {
+				// Step3-1 fireball.move();
+				fireball.move();
+
+				if (fireball.hadReachTheTop()) {
+					fireballs.splice(i, 1);
+					fireworks.push(fireball);
+				}
+			});
+
+			fireworks.forEach((firework, i) => {
+				// Step3-2 firework.explode();
+				firework.explode();
+				
+				if (firework.lifeTime < 0) {
+					fireworks.splice(i, 1);
+					firework.dispose(scene);
+				}
+			});
+
+			renderer.render( scene, camera );
+		};
+		
+
+		// 以下，追加要素
+		SpeechRecognition = webkitSpeechRecognition || SpeechRecognition;
+		const recognition = new SpeechRecognition();
+		recognition.lang = 'ja-JP'; // 言語コード
+		recognition.continuous = true;
+		// recognition.interimResults = true;
+
+		
+		// 発話検出時に呼ばれる
+		recognition.onresult = (event) => {
+			console.log("result: ");
+			let result = event.results[0][0].transcript;
+			//　Step? 適切なワードを
+			if(result === "ドドンドンドドン") {
+				for (let i = 0; i < 15; i++) {
+					addVoiceFire();
+				}
+			}  else if(result === "CPU のヒットポイントはもうゼロよ") {
+				for (let i = 0; i < 1000; i++) {
+					addVoiceFire();
+				}
+			}  else if (result === "爆発" || result === "ドッカン" || result === "どっかーん") {
+				fireballs.filter( fireball => fireball instanceof RemoteFireWork)
+					.forEach((fireball, i) => {
+						fireball.fire();
+						fireballs.splice(i, 1);
+						fireworks.push(fireball);
+					});
+			} else {
+				// Step 正規表現 花火と言った回数分花火を打ち上げる
+				result.match(/花火/g).forEach(word => {
+					let firework = new RemoteFireWork(particleTexture)
+					fireballs.push(firework);
+					scene.add(firework.pointCloud);
+				});
+			}
+			console.log(result);
+		}
+
+		function addVoiceFire() {
+			const firework = new RemoteFireWork(particleTexture)
+			fireballs.push(firework);
+			scene.add(firework.pointCloud);
+		}
+
+		// 終了時に呼ばれる
+		recognition.onend = (event) => {
+			// 音声認識の再度開始
+			console.log("end");
+			// recoStart();
+		}
+		function recoStop() {
+			// 音声認識の開始
+			console.log("認識終了");
+			recognition.stop();
+		}
+
+		function recoStart() {
+			// 音声認識の開始
+			console.log("認識開始...");
+			recognition.start();
+		}
+
+		const svgLoader = new THREE.SVGLoader();
+
+		// load a SVG resource
+		svgLoader.load(
+			// resource URL
+			'./assets/data/anpan.svg',
+			// called when the resource is loaded
+			function ( data ) {
+
+				const paths = data.paths;
+				const group = new THREE.Group();
+
+				for ( let i = 0; i < paths.length; i ++ ) {
+
+					const path = paths[ i ];
+
+					const material = new THREE.MeshBasicMaterial( {
+						color: path.color,
+						side: THREE.DoubleSide,
+						depthWrite: false
+					} );
+
+					const shapes = THREE.SVGLoader.createShapes( path );
+
+					for ( let j = 0; j < shapes.length; j ++ ) {
+
+						const shape = shapes[ j ];
+						const geometry = new THREE.ShapeGeometry( shape );
+						const mesh = new THREE.Mesh( geometry, material );
+						group.add( mesh );
+
+					}
+
+				}
+
+				scene.add( group );
+			},
+			// called when loading is in progresses
+			function ( xhr ) {
+
+				console.log( ( xhr.loaded / xhr.total * 100 ) + '% loaded' );
+
+			},
+			// called when loading has errors
+			function ( error ) {
+				console.log(error)
+				console.log( 'An error happened' );
+
+			}
+		);
+
+	</script>
+</body>
+</html>
