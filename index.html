@@ -6,7 +6,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>test</title>
     <style>
-
         body {margin: 0;}
     </style>
 </head>
@@ -18,6 +17,47 @@
 	<script src="util.js"></script>
     <script src="firework.js"></script>
 	<script>
+		// 設定
+		const setting = {
+			size: 10
+		}
+		// 形状の設定
+		const shape = {
+			sphere: 0,
+			circle: 1,
+			torus: 2,
+			torusKnot: 3
+		}
+
+		function createGeometry(type) {
+			const size = setting.size;
+			const shapeType = (typeof type === "undefined") ? parseInt(Math.random() * 4) : type;
+			switch(shapeType) {
+				case shape.sphere:
+					// 球体
+					return new THREE.SphereGeometry( 3, size, size );
+				case shape.circle:
+					// 円
+					return new THREE.CircleGeometry(3, 120, size, 18);
+				case shape.torus:
+					// ドーナッツ
+					return new THREE.TorusGeometry(3, 3, size, size);
+				case shape.torusKnot:
+					// 結び目
+					return new THREE.TorusKnotGeometry(3, 3, size, size);
+				default:
+					// TODO: これ設定しておかないと本来は危険
+			}
+		}
+
+		function add(FireWork, texture, geometryType) {
+				const geometry = createGeometry(geometryType);
+				// Step.2 new FireWork(geometry, texture);
+				let firework = new FireWork(geometry, texture);
+				fireworks.push(firework);
+				scene.add(firework.pointCloud);
+		}
+
 		let nowRecording = false;
 		const scene = new THREE.Scene();
 		
@@ -31,9 +71,7 @@
 		scene.add(ambientLight);
 
 
-		let fireballs = [];
 		let fireworks = [];
-
 		let particleTexture;
 
 		const loader = new THREE.TextureLoader();
@@ -42,17 +80,9 @@
 			console.log("texture loaded")
 			particleTexture = texture;
 
-			// Step.2 new FireWork(texture);
-			const add = (FireWork) => {
-				let firework = new FireWork(texture);
-				fireballs.push(firework);
-				scene.add(firework.pointCloud);
-			};
-
 			window.addEventListener('click' , (event) => {
-				add(FireWork);
+				add(FireWork, particleTexture);
 			});
-			
 			
 			//　Sample: 右クリックするたびに録音開始，終了の切り替え
 			window.oncontextmenu = () => {
@@ -65,22 +95,29 @@
 				}
 			};
 
-
 			window.addEventListener('keyup', (event) => {
+				console.log(event.key)
 				switch(event.key) {
 					case " ":
-						// Step4 add(RemoteFireWork);
-						add(RemoteFireWork);
+						// Step4 Firework -> RemoteFireWork
+						add(RemoteFireWork, particleTexture);
 						break;
 					// Step5 case "Enter":
 					case "Enter":
-						fireballs.filter( fireball => fireball instanceof RemoteFireWork)
-							.forEach((fireball, i) => {
-								fireball.fire();
-								fireballs.splice(i, 1);
-								fireworks.push(fireball);
-							});
-
+						fireworks.filter( firework => firework instanceof RemoteFireWork && !firework.isExploded)
+										.forEach( firework => { firework.explode() });
+						break;
+					case "1":
+						add(RemoteFireWork, particleTexture, shape.sphere);
+						break;
+					case "2":
+						add(RemoteFireWork, particleTexture, shape.circle);
+						break;
+					case "3":
+						add(RemoteFireWork, particleTexture, shape.torus);
+						break;
+					case "4":
+						add(RemoteFireWork, particleTexture, shape.torusKnot);
 						break;
 					case "Control":
 						nowRecording = false;
@@ -108,20 +145,15 @@
 		function animate() {
 			requestAnimationFrame( animate );
 
-			fireballs.forEach((fireball, i) => {
-				// Step3-1 fireball.move();
-				fireball.move();
-
-				if (fireball.hadReachTheTop()) {
-					fireballs.splice(i, 1);
-					fireworks.push(fireball);
-				}
-			});
-
 			fireworks.forEach((firework, i) => {
-				// Step3-2 firework.explode();
-				firework.explode();
-				
+				// Step3-1 firework.move();
+				firework.move();
+
+				if (firework.hadReachTheTop()) {
+					// Step3-2 firework.explode();
+					firework.explode();
+				}
+
 				if (firework.lifeTime < 0) {
 					fireworks.splice(i, 1);
 					firework.dispose(scene);
@@ -147,34 +179,22 @@
 			//　Step? 適切なワードを
 			if(result === "ドドンドンドドン") {
 				for (let i = 0; i < 15; i++) {
-					addVoiceFire();
+					add(RemoteFireWork, particleTexture);
 				}
-			}  else if(result === "CPU のヒットポイントはもうゼロよ") {
+			} else if(result === "CPU のヒットポイントはもうゼロよ") {
 				for (let i = 0; i < 1000; i++) {
-					addVoiceFire();
+					add(RemoteFireWork, particleTexture);
 				}
-			}  else if (result === "爆発" || result === "ドッカン" || result === "どっかーん") {
-				fireballs.filter( fireball => fireball instanceof RemoteFireWork)
-					.forEach((fireball, i) => {
-						fireball.fire();
-						fireballs.splice(i, 1);
-						fireworks.push(fireball);
-					});
+			} else if (result === "爆発" || result === "ドッカン" || result === "どっかーん") {
+				fireworks.filter( firework => firework instanceof RemoteFireWork && !firework.isExploded)
+										.forEach( firework => { firework.explode() });
 			} else {
 				// Step 正規表現 花火と言った回数分花火を打ち上げる
 				result.match(/花火/g).forEach(word => {
-					let firework = new RemoteFireWork(particleTexture)
-					fireballs.push(firework);
-					scene.add(firework.pointCloud);
+					add(RemoteFireWork, particleTexture);
 				});
 			}
 			console.log(result);
-		}
-
-		function addVoiceFire() {
-			const firework = new RemoteFireWork(particleTexture)
-			fireballs.push(firework);
-			scene.add(firework.pointCloud);
 		}
 
 		// 終了時に呼ばれる

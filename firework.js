@@ -1,6 +1,6 @@
 class FireWork {
 
-    constructor(texture) {
+    constructor(geometry, texture) {
         this.size = 10;
         this.color = this.getColor();
         this.upRatio = 0.3;
@@ -10,42 +10,14 @@ class FireWork {
         this.maxLifeTime = Math.random() * 250 + 100;
         this.lifeTime = this.maxLifeTime;
         this.particleSize = 150;
-
-        const rand = parseInt(Math.random() * 4);
-        switch(rand) {
-            case 0:
-                // 球体
-                this.geometry = new THREE.SphereGeometry( 3, this.size, this.size );
-                break;
-            case 1:
-                // 円
-                this.geometry = new THREE.CircleGeometry(3, 120, this.size, 18);
-                break;
-            case 2:
-                // ドーナッツ
-                this.geometry = new THREE.TorusGeometry(3, 3, this.size, this.size);
-                break;
-            case 3:
-                // 結び目
-                this.geometry = new THREE.TorusKnotGeometry(3, 3, this.size, this.size);
-                break;
-            default:
-
-        }
+        this.geometry = geometry;
+        this.isExploded = false;
         
         // TODO: BufferGeometryにした方が速度上がる？
         // this.geometry = new THREE.BufferGeometry();
 		// this.geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( particlePositions, 3 ).setUsage(THREE.DynamicDrawUsage));
 
         for ( let i = 0; i < this.size * this.size; i ++ ) {
-			//  TODO: 特殊な形状の時は，指定しましょう。
-            // particlePositions[i*3] = THREE.MathUtils.randFloatSpread( size );
-			// particlePositions[i*3+1] = THREE.MathUtils.randFloatSpread( size );
-			// particlePositions[i*3+2] = THREE.MathUtils.randFloatSpread( size );
-            // this.particlePositions[i*3] = 　0;
-			// this.particlePositions[i*3+1] = 0;
-			// this.particlePositions[i*3+2] = 0;
-		
 			//速度（x、y、z）を設定 中心からの座標のずれをそのまま速度にしている
 			this.particleVelocity[i] = new THREE.Vector3();
             this.particleVelocity[i].x = this.geometry.attributes.position.getX(i);
@@ -88,58 +60,49 @@ class FireWork {
         //頂点座標を取得
         const particlePositions = this.pointCloud.geometry.attributes.position.array;
         
-        for(let i = 0; i < this.size * this.size; i++){
-            // 打ち上げ
-            this.pointCloud.position.y += 0.1;
+        if (this.isExploded) {
+            for(let i = 0; i < this.size * this.size; i++){
+                //頂点座標に速度を加算
+                particlePositions[i*3] += this.particleVelocity[i].x;
+                particlePositions[i*3+1] += this.particleVelocity[i].y;
+                particlePositions[i*3+2] += this.particleVelocity[i].z;
+    
+                this.particleVelocity[i].x * 0.9;
+                this.particleVelocity[i].y * 0.9;
+                this.particleVelocity[i].z * 0.9;
+            } 
+    
+            this.lifeTime--;
+            this.pointCloud.material.opacity -= 0.01
+            // PointCloudの更新を通知するフラグ
+            this.pointCloud.geometry.attributes.position.needsUpdate = true;
+        } else {
+            for(let i = 0; i < this.size * this.size; i++){
+                // 打ち上げ
+                this.pointCloud.position.y += 0.1;
+            }
         }
 
-        //更新を通知するフラグ
-        this.pointCloud.geometry.attributes.position.needsUpdate = true;
     
 		return false; 
     }
 
     hadReachTheTop() {
-        if (this.lifeTime < this.maxLifeTime * this.upRatio) {
-            // 角度を変えたい
-            this.fire();
+        if (this.lifeTime < this.maxLifeTime * this.upRatio && !this.isExploded) {
             return true;
         }  
         return false;
     }
-
-    fire() {
+    
+    explode() {
+        this.isExploded = true;
+        // 爆発して散っていく角度をランダムに指定
         const x = Math.random() * 90 - 45;
         const y = Math.random() * 90 - 45;
         const z = Math.random() * 90 - 45;
         this.pointCloud.rotation.set(x, y, z );
         this.material.depthWrite = false;
     }
-
-    explode() {
-        //頂点座標を取得
-        const particlePositions = this.pointCloud.geometry.attributes.position.array;
-        
-        for(let i = 0; i < this.size * this.size; i++){
-            //頂点座標に速度を加算
-            particlePositions[i*3] += this.particleVelocity[i].x;
-            particlePositions[i*3+1] += this.particleVelocity[i].y;
-            particlePositions[i*3+2] += this.particleVelocity[i].z;
-
-            this.particleVelocity[i].x * 0.9;
-            this.particleVelocity[i].y * 0.9;
-            this.particleVelocity[i].z * 0.9;
-        } 
-
-        this.lifeTime--;
-
-        this.pointCloud.material.opacity -= 0.01
-        
-		
-        //更新を通知するフラグ
-        this.pointCloud.geometry.attributes.position.needsUpdate = true;
-    }
-
     
     dispose(scene) {
         scene.remove(this.pointCloud);
@@ -166,23 +129,19 @@ class FireWork {
 
 class RemoteFireWork extends FireWork {
     hadReachTheTop() {
-        if (this.lifeTime < this.maxLifeTime * this.upRatio) {
-            // 爆発する前に，確度のランダム性を持たせたい
+        if (this.lifeTime < this.maxLifeTime * this.upRatio && !this.isExploded) {
+            // 爆発する前に，角度のランダム性を持たせたい
             this.lifeTime++;
-
-            const particlePositions = this.pointCloud.geometry.attributes.position.array;
-        
             for(let i = 0; i < this.size * this.size; i++){
                 // 打ち上げの移動を戻す
                 this.pointCloud.position.y -= 0.1;  
             }
-            this.pointCloud.geometry.attributes.position.needsUpdate = true;
         }
 		return false;
     }
 
-    fire() {
-        super.fire();
+    explode() {
+        super.explode();
         this.lifeTime = this.maxLifeTime * this.upRatio - 1;
     }
 }
